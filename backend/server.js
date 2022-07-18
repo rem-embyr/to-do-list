@@ -4,8 +4,18 @@ const express = require("express"),
        cors = require("cors");
 const bodyParser = require('body-parser');
 const fs = require("fs");
+const basicAuth = require("express-basic-auth");
+var { authenticator, upsertUser, cookieAuth } = require("./authentication");
+const auth = basicAuth({
+    authorizer: authenticator
+});
+const cookieParser = require("cookie-parser");
+app.use(cookieParser("82e4e438a0705fabf61f9854e3b575af"));
 
-app.use(cors());
+app.use(cors({
+  credentials: true,
+  origin: 'http://localhost:3000'
+}));
 app.use(bodyParser.json({ extended: true }));
 app.listen(port, () => console.log("Backend server live on " + port));
 
@@ -14,7 +24,7 @@ app.get("/", (req, res) => {
     });
 
 //add new item to json file
-app.post("/add/item", addItem)
+app.post("/add/item", cookieAuth, addItem)
 
 function addItem (request, response) {
     // Converting Javascript object (Task Item) to a JSON string
@@ -40,7 +50,25 @@ function addItem (request, response) {
     response.send(200)
     }
 
-app.get("/get/items", getItems)
+  app.get("/authenticate", auth, (req, res) => {
+     console.log(`user logging in: ${req.auth.user}`);
+     res.cookie('user', req.auth.user, { signed: true });
+     res.sendStatus(200);
+  });
+  
+  app.post("/users", (req, res) => {
+      const b64auth = (req.headers.authorization || '').split(' ')[1] || ''
+      const [username, password] = Buffer.from(b64auth, 'base64').toString().split(':')
+      const upsertSucceeded = upsertUser(username, password)
+      res.sendStatus(upsertSucceeded ? 200 : 401);
+  });
+  
+  app.get("/logout", (req, res) => {
+      res.clearCookie('user');
+      res.end();
+  });
+  
+app.get("/get/items", cookieAuth, getItems)
 //** week5, get all items from the json database*/
   function getItems (request, response) {
     //begin here
@@ -53,7 +81,7 @@ app.get("/get/items", getItems)
     // Note this won't work, why? response.send();
   } 
 
-app.get("/get/searchitem",searchItems)
+app.get("/get/searchitem",cookieAuth, searchItems)
 //**week 5, search items service */
   function searchItems (request, response) {
     //begin here
